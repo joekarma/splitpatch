@@ -106,10 +106,11 @@ OPTIONS
 
 DESCRIPTION
 
-    Split the patch up into files
+    Split a patch up into files
 
-    Divide a patch or diff file into per-file patches. This makes it
-    possible to separate changes that might not be desirable or assemble
+    Divide a patch or diff file into per-file patches, separating them into
+    a directory structure that's created inside the directory it's run from.
+    This makes it possible to separate changes that might not be desirable or assemble
     the patch into a more coherent set of changes. See e.g. combinediff(1)
     from patchutils package.
 
