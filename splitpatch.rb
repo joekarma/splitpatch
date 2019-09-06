@@ -28,6 +28,8 @@ VERSION = 1.0
 LICENSE = "GPL-2+"  # See official acronyms: https://spdx.org/licenses/
 AUTHOR  = "Peter Hutterer <peter.hutterer@who-t.net>"
 
+require 'fileutils'
+
 #       Splitpatch is a simple script to split a patch up into
 #       multiple patch files. If the --hunks option is provided on the
 #       command line, each hunk gets its own patchfile.
@@ -35,11 +37,6 @@ AUTHOR  = "Peter Hutterer <peter.hutterer@who-t.net>"
 class Splitter
     def initialize(file)
        @filename = file
-       @fullname = false
-    end
-
-    def fullname(opt)
-       @fullname = opt
     end
 
     def validFile?
@@ -60,15 +57,11 @@ class Splitter
         return open(filename, "w")
     end
 
-    def getFilename(line)
+    def getPathAndFileName(line)
         tokens = line.split(" ")
         tokens = tokens[1].split(":")
         tokens = tokens[0].split("/")
-        if @fullname
-            return tokens.join('-')
-        else
-            return tokens[-1]
-        end
+        return tokens
     end
 
     # Split the patchfile by files 
@@ -80,76 +73,17 @@ class Splitter
             line = stream.readline
 
             # we need to create a new file
-            if (line =~ /^Index: .*/) == 0
-                # patch includes Index lines
-                # drop into "legacy mode"
-                legacy = true
-                if (outfile)
-                    outfile.close_write
-                end
-                filename = getFilename(line)
-                filename << ".patch"
-                outfile = createFile(filename)
-                outfile.write(line)
-            elsif (line =~ /--- .*/) == 0 and not legacy
+            if (line =~ /--- .*/) == 0
                 if (outfile) 
                     outfile.close_write
                 end
                 #find filename
-                filename = getFilename(line)
-                filename << ".patch"
-                outfile = createFile(filename)
-                outfile.write(line)
-            else
-                if outfile
-                    outfile.write(line)
-                end
-            end
-        end
-    end
-
-    def splitByHunk
-        legacy = false
-        outfile = nil
-        stream = open(@filename)
-        filename = ""
-        counter = 0
-        header = ""
-        until (stream.eof?)
-            line = stream.readline
-
-            # we need to create a new file
-            if (line =~ /^Index: .*/) == 0
-                # patch includes Index lines
-                # drop into "legacy mode"
-                legacy = true
-                filename = getFilename(line)
-                header = line
-                # remaining 3 lines of header
-                for i in 0..2
-                    line = stream.readline
-                    header << line
-                end
-                counter = 0
-            elsif (line =~ /--- .*/) == 0 and not legacy
-                #find filename
-                filename = getFilename(line)
-                header = line
-                # next line is header too
-                line = stream.readline
-                header << line
-                counter = 0
-            elsif (line =~ /@@ .* @@/) == 0
-                if (outfile) 
-                    outfile.close_write
-                end
-
-                zero = counter.to_s.rjust(3, '0')
-                hunkfilename = "#{filename}.#{zero}.patch"
-                outfile = createFile(hunkfilename)
-                counter += 1
-
-                outfile.write(header)
+                path_parts = getPathAndFileName(line)
+                filepath = File.join(path_parts)
+                filedir = File.join(path_parts[0...-1])
+                FileUtils.mkdir_p(filedir)
+                filepath << ".patch"
+                outfile = createFile(filepath)
                 outfile.write(line)
             else
                 if outfile
@@ -168,17 +102,16 @@ SYNOPSIS
 
 OPTIONS
     -h,--help
-    -H,--hunk
     -V,--version
 
 DESCRIPTION
 
-    Split the patch up into files or hunks
+    Split the patch up into files
 
-    Divide a patch or diff file into pieces. The split can made by file
-    or by hunk basis. This makes it possible to separate changes that
-    might not be desirable or assemble the patch into a more coherent set
-    of changes. See e.g. combinediff(1) from patchutils package.
+    Divide a patch or diff file into per-file patches. This makes it
+    possible to separate changes that might not be desirable or assemble
+    the patch into a more coherent set of changes. See e.g. combinediff(1)
+    from patchutils package.
 
     Note: only patches in unified format are recognized.
 EOF
@@ -198,23 +131,17 @@ else
     if /^-h$|--help/.match(opt)
         help
         exit 0
-    elsif /^-H$|--hunks?/.match(opt)
-        hunk = 1
     elsif /^-V$|--version/.match(opt)
         version
         exit 0
     elsif /^-/.match(opt)
-        puts "ERROR: Unknonw option: #{opt}. See --help."
+        puts "ERROR: Unknown option: #{opt}. See --help."
         exit 1
         end
     file = ARGV[-1]
     s = Splitter.new(file)
     if s.validFile?
-        if hunk
-            s.splitByHunk
-        else
-            s.splitByFile
-        end
+        s.splitByFile
     else
         puts "File does not exist or is not readable: #{file}"
     end
